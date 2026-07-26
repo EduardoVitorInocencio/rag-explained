@@ -1,0 +1,338 @@
+# RAG Explained
+
+This repository is a small, didactic example of a Retrieval-Augmented Generation (RAG) pipeline built with OpenAI, LangChain, and ChromaDB.
+
+Instead of asking a language model to answer only from its internal training data, RAG first retrieves relevant information from your own documents and then uses that retrieved context to generate an answer. This makes responses more grounded, more auditable, and more useful for domain-specific tasks.
+
+## What Is RAG?
+
+RAG stands for **Retrieval-Augmented Generation**.
+
+It combines two steps:
+
+1. **Retrieval**
+   The system searches a document collection for the chunks that are most relevant to a question.
+2. **Generation**
+   The language model receives those retrieved chunks as context and writes the final answer.
+
+In practice, this means the model is not answering blindly. It is answering with support from external knowledge that you control.
+
+## Why Use RAG?
+
+RAG is useful when you want an LLM to work with information that is:
+
+- private
+- domain-specific
+- too recent to rely on model training alone
+- traceable back to source documents
+
+Typical benefits:
+
+- Better factual grounding
+- Lower hallucination risk
+- Answers based on your own files
+- Easier source attribution
+- No need to fine-tune a model for every knowledge base
+
+## Common Use Cases
+
+RAG is commonly used for:
+
+- Internal knowledge assistants over company documents
+- Customer support bots over product manuals and FAQs
+- Legal, compliance, or policy search
+- Research assistants over reports, papers, or notes
+- Healthcare and operations copilots over structured reference content
+- Restaurant, catalog, or product assistants over curated business data
+
+This repository demonstrates the last pattern with a text file about **Eleven Madison Park**.
+
+## How RAG Works In This Project
+
+The current [`main.py`](C:\Users\eduardo.inocencio\OneDrive - Kantar\Área de Trabalho\rag-explained\main.py) implements a full educational RAG flow:
+
+1. Load the OpenAI API key from `.env`
+2. Read a local text file as the knowledge base
+3. Split the document into chunks
+4. Convert each chunk into embeddings
+5. Store the vectors in ChromaDB
+6. Run similarity search for a query
+7. Turn the vector store into a retriever
+8. Send retrieved chunks to the LLM
+9. Return an answer plus sources
+
+That is the core RAG pattern in a single file.
+
+## Pipeline Walkthrough
+
+### 1. Load environment variables
+
+The script loads the API key from `.env`:
+
+```python
+load_dotenv()
+openai_api_key = os.getenv("OPENAI_API_KEY")
+```
+
+This key is then used both for embeddings and for the language model.
+
+### 2. Load the knowledge source
+
+The example uses a plain text file as the source of truth:
+
+```python
+DATA_FILE_PATH = "eleven_madison_park_data.txt"
+loader = TextLoader(DATA_FILE_PATH, encoding="utf-8")
+raw_documents = loader.load()
+```
+
+Conceptually, this is the "knowledge base" side of RAG. In larger systems, this could be replaced by PDFs, web pages, Notion exports, databases, or document repositories.
+
+### 3. Split the document into chunks
+
+Large documents are split into smaller pieces before indexing:
+
+```python
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=150,
+)
+documents = text_splitter.split_documents(raw_documents)
+```
+
+Why chunking matters:
+
+- Embedding a giant document as one block hurts retrieval quality
+- Smaller chunks improve semantic matching
+- Overlap helps preserve context across chunk boundaries
+
+In this example, the script uses `chunk_size=1000` and `chunk_overlap=150`.
+
+### 4. Create embeddings
+
+Each chunk is transformed into a vector representation:
+
+```python
+embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+```
+
+Embeddings allow semantic search. The system can retrieve chunks that are conceptually related to a question, even if they do not contain the exact same wording.
+
+### 5. Store vectors in ChromaDB
+
+The chunk vectors are stored in a vector database:
+
+```python
+vector_store = Chroma.from_documents(
+    documents=documents,
+    embedding=embeddings,
+)
+```
+
+This is what makes fast retrieval possible later.
+
+### 6. Test similarity search
+
+Before building the full question-answering chain, the script validates retrieval directly:
+
+```python
+test_query = "Who is Daniel Humm?"
+similar_docs = vector_store.similarity_search(test_query, k=3)
+```
+
+This is an important educational step because it shows that RAG is not "magic". First, the system finds relevant chunks. Only after that does generation happen.
+
+### 7. Build the retriever
+
+The vector store is converted into a retriever interface:
+
+```python
+retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+```
+
+Here, `k=3` means the model will receive the three most relevant chunks for each question.
+
+### 8. Configure the LLM
+
+The final answer is generated by an OpenAI-backed language model:
+
+```python
+llm = OpenAI(
+    temperature=1.3,
+    openai_api_key=openai_api_key,
+)
+```
+
+For a factual RAG assistant, a lower temperature is often preferred. This example keeps `1.3` because the goal of the repository is to explain the current code rather than redesign it.
+
+### 9. Create the RAG chain
+
+The retriever and the LLM are connected through LangChain's QA-with-sources flow:
+
+```python
+qa_chain = RetrievalQAWithSourcesChain.from_chain_type(
+    llm=llm,
+    chain_type="stuff",
+    retriever=retriever,
+    return_source_documents=True,
+    verbose=True,
+)
+```
+
+This is the actual RAG assembly:
+
+- the retriever fetches relevant chunks
+- the chain injects them into the prompt
+- the LLM generates the answer
+- the response includes sources
+
+### 10. Run a full RAG query
+
+The repository closes with a complete end-to-end question:
+
+```python
+chain_test_query = "What kind of food does Eleven Madison Park serve?"
+result = qa_chain.invoke({"question": chain_test_query})
+```
+
+The output includes:
+
+- `answer`
+- `sources`
+- `source_documents`
+
+This is the most important idea in RAG: the answer is produced from retrieved context, not only from the model's memory.
+
+## Concrete Examples From `main.py`
+
+The repository already contains two good examples that illustrate the two halves of a RAG system:
+
+### Retrieval example
+
+```python
+test_query = "Who is Daniel Humm?"
+similar_docs = vector_store.similarity_search(test_query, k=3)
+```
+
+This demonstrates the **retrieval** stage only. The system searches the indexed chunks and returns the most relevant snippets.
+
+### Full RAG example
+
+```python
+chain_test_query = "What kind of food does Eleven Madison Park serve?"
+result = qa_chain.invoke({"question": chain_test_query})
+```
+
+This demonstrates **retrieval + generation** together:
+
+- retrieve the best chunks
+- pass them to the model
+- generate a grounded answer with sources
+
+## When RAG Is Better Than Plain Prompting
+
+Plain prompting is often enough when:
+
+- the task is generic
+- no private knowledge is needed
+- the answer does not depend on a specific corpus
+
+RAG is a better fit when:
+
+- answers must come from a known document set
+- you need citations or traceability
+- the knowledge changes frequently
+- the domain is too specialized to trust generic model memory
+
+## Limitations Of This Example
+
+This repository is intentionally simple. It is good for learning, but it is not yet a production-grade RAG architecture.
+
+Current limitations include:
+
+- Single-file implementation
+- One local text file as the only data source
+- In-memory vector store setup
+- No evaluation pipeline
+- No prompt hardening
+- No metadata filtering
+- No reranking step
+- Minimal error handling
+
+Those limitations are normal for an educational example.
+
+## Notes About The Current Code
+
+Two implementation details in the current [`main.py`](C:\Users\eduardo.inocencio\OneDrive - Kantar\Área de Trabalho\rag-explained\main.py) are worth knowing:
+
+### 1. `OpenAI` name conflict
+
+The file imports both:
+
+```python
+from openai import OpenAI
+from langchain_openai import OpenAIEmbeddings, OpenAI
+```
+
+The second import overrides the first `OpenAI` name. So later usages of `OpenAI(...)` refer to the LangChain integration class, not necessarily the OpenAI SDK client.
+
+### 2. Data file location
+
+The script expects:
+
+```python
+DATA_FILE_PATH = "eleven_madison_park_data.txt"
+```
+
+But the sample file in this repository is currently under [`docs/eleven_madison_park_data.txt`](C:\Users\eduardo.inocencio\OneDrive - Kantar\Área de Trabalho\rag-explained\docs\eleven_madison_park_data.txt), not in the repository root. To run the example as written, you must either:
+
+- copy the file to the project root, or
+- update `DATA_FILE_PATH` to point to the `docs` folder
+
+## How To Run
+
+With `uv`:
+
+```bash
+uv sync
+uv run python main.py
+```
+
+Or with `pip`:
+
+```bash
+pip install -e .
+python main.py
+```
+
+Before running, create a `.env` file with:
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+Also make sure the knowledge file path matches the real location of the dataset.
+
+## Suggested Next Steps
+
+If you want to evolve this project, the most natural improvements are:
+
+- Move from one script to modular components
+- Persist the Chroma database to disk
+- Add support for PDFs and multiple files
+- Lower temperature for more stable factual answers
+- Add automated evaluation for retrieval quality
+- Build a small chat UI on top of the retriever
+
+## Summary
+
+This repository is a compact explanation of how RAG works:
+
+- documents are loaded
+- documents are chunked
+- chunks become embeddings
+- embeddings are stored in a vector database
+- relevant chunks are retrieved for each question
+- the LLM answers using those chunks as context
+
+That is the essential RAG workflow, and [`main.py`](C:\Users\eduardo.inocencio\OneDrive - Kantar\Área de Trabalho\rag-explained\main.py) shows each step explicitly.
