@@ -49,7 +49,7 @@ This repository demonstrates the last pattern with a text file about **Eleven Ma
 
 ## How RAG Works In This Project
 
-The current [`main.py`](C:\Users\eduardo.inocencio\OneDrive - Kantar\Área de Trabalho\rag-explained\main.py) implements a full educational RAG flow:
+The current [`main.py`](C:\Users\eduardo.inocencio\Área de Trabalho\rag-explained\main.py) implements a full educational RAG flow:
 
 1. Load the OpenAI API key from `.env`
 2. Read a local text file as the knowledge base
