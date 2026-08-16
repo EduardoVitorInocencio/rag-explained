@@ -12,6 +12,7 @@ dependencies = [
     "langchain-classic>=1.0.8",
     "langchain-community>=0.4.2",
     "langchain-core>=1.5.1",
+    "langchain-ollama>=1.1.0",
     "langchain-openai>=1.4.1",
     "langchain-text-splitters>=1.1.2",
     "openai>=2.48.0",
