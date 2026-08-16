@@ -96,7 +96,7 @@ print(openai_api_key[:15])
 #
 # O arquivo `eleven_madison_park_data.txt` deve estar no diretório de execução
 # do script ou notebook.
-DATA_FILE_PATH = "eleven_madison_park_data.txt"
+DATA_FILE_PATH = "./docs/eleven_madison_park_data.txt"
 print(f"Data file path set to: {DATA_FILE_PATH}")
 
 # Informa no console que o processo de leitura será iniciado.
