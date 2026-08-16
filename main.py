@@ -26,21 +26,28 @@
 # foi aplicada aqui para preservar a lógica original.
 # ======================================================================================
 
-from openai import OpenAI
-
 # Biblioteca padrão para acesso a variáveis de ambiente e recursos do sistema operacional.
 import os
 
 # Carrega variáveis declaradas em um arquivo `.env`.
 from dotenv import load_dotenv
 
+# Integração do LangChain com o banco vetorial ChromaDB.
+from langchain_chroma import Chroma
+
 # Componentes de integração entre LangChain e OpenAI.
 # `OpenAIEmbeddings` transforma textos em vetores numéricos.
 # `OpenAI` representa o modelo de linguagem disponibilizado pela integração.
-from langchain_openai import OpenAIEmbeddings, OpenAI
+from langchain_openai import (
+    ChatOpenAI,
+    OpenAIEmbeddings,
+)
 
-# Integração do LangChain com o banco vetorial ChromaDB.
-from langchain_chroma import Chroma
+from langchain_ollama import (
+    ChatOllama,
+    OllamaEmbeddings,
+)
+
 
 # Divisor de texto que tenta preservar parágrafos, frases e palavras.
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -67,7 +74,7 @@ load_dotenv()
 #     OPENAI_API_KEY=sua-chave-aqui
 #
 # Atenção: caso a variável não exista, `openai_api_key` receberá `None`.
-openai_api_key = os.getenv("OPENAI_API_KEY")
+
 
 # Inicializa o objeto chamado `OpenAI` usando a chave carregada.
 #
@@ -84,8 +91,6 @@ print("OpenAI client successfully configured.")
 # capturas de tela ou ambientes de produção. Esta linha foi mantida somente porque
 # já fazia parte do código original.
 #
-# Também poderá ocorrer um erro caso `openai_api_key` seja `None`.
-print(openai_api_key[:15])
 
 
 # ======================================================================================
