@@ -68,21 +68,41 @@ from langchain_classic.chains.qa_with_sources.retrieval import (
 # Carrega as variáveis do arquivo `.env` para o ambiente da aplicação.
 load_dotenv()
 
-# Obtém a chave da OpenAI armazenada na variável de ambiente `OPENAI_API_KEY`.
-# O arquivo `.env` deve conter uma linha semelhante a:
-#
-#     OPENAI_API_KEY=sua-chave-aqui
-#
-# Atenção: caso a variável não exista, `openai_api_key` receberá `None`.
+def escolher_provider():
 
+    provider_env = os.getenv(
+        "AI_PROVIDER",
+        "ask",
+    ).lower()
 
-# Inicializa o objeto chamado `OpenAI` usando a chave carregada.
-#
-# IMPORTANTE:
-# Devido ao conflito de imports explicado no início do arquivo, neste ponto o nome
-# `OpenAI` corresponde à última classe importada com esse nome.
-openai_client = OpenAI(api_key=openai_api_key)
-print("OpenAI client successfully configured.")
+    if provider_env in ["ollama", "openai"]:
+        return provider_env
+
+    print()
+    print("=" * 60)
+    print("SELECIONE O PROVIDER")
+    print("=" * 60)
+    print()
+    print("1 - LOCAL  | Ollama + Qwen")
+    print("2 - CLOUD  | OpenAI")
+    print()
+
+    while True:
+
+        opcao = input(
+            "Digite 1 ou 2: "
+        ).strip()
+
+        if opcao == "1":
+            return "ollama"
+
+        if opcao == "2":
+            return "openai"
+
+        print(
+            "Opção inválida. Digite 1 ou 2."
+        )
+
 
 # Exibe os primeiros caracteres da chave apenas como verificação.
 #
