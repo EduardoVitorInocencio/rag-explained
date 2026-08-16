@@ -103,6 +103,102 @@ def escolher_provider():
             "Opção inválida. Digite 1 ou 2."
         )
 
+def criar_modelos(provider):
+
+    # ========================================================
+    # OLLAMA
+    # ========================================================
+
+    if provider == "ollama":
+
+        base_url = os.getenv(
+            "OLLAMA_BASE_URL",
+            "http://localhost:11434",
+        )
+
+        chat_model = os.getenv(
+            "OLLAMA_CHAT_MODEL",
+            "qwen3.5:0.8b",
+        )
+
+        embedding_model = os.getenv(
+            "OLLAMA_EMBEDDING_MODEL",
+            "qwen3-embedding:0.6b",
+        )
+
+        print()
+        print("=" * 60)
+        print("MODELO LOCAL")
+        print("=" * 60)
+
+        print(f"Provider....: Ollama")
+        print(f"LLM.........: {chat_model}")
+        print(f"Embeddings..: {embedding_model}")
+
+        llm = ChatOllama(
+            model=chat_model,
+            base_url=base_url,
+            temperature=0,
+        )
+
+        embeddings = OllamaEmbeddings(
+            model=embedding_model,
+            base_url=base_url,
+        )
+
+        return llm, embeddings
+
+    # ========================================================
+    # OPENAI
+    # ========================================================
+
+    if provider == "openai":
+
+        api_key = os.getenv(
+            "OPENAI_API_KEY"
+        )
+
+        if not api_key:
+
+            raise ValueError(
+                "OPENAI_API_KEY não encontrada no .env."
+            )
+
+        chat_model = os.getenv(
+            "OPENAI_CHAT_MODEL",
+            "gpt-5-mini",
+        )
+
+        embedding_model = os.getenv(
+            "OPENAI_EMBEDDING_MODEL",
+            "text-embedding-3-small",
+        )
+
+        print()
+        print("=" * 60)
+        print("MODELO OPENAI")
+        print("=" * 60)
+
+        print(f"Provider....: OpenAI")
+        print(f"LLM.........: {chat_model}")
+        print(f"Embeddings..: {embedding_model}")
+
+        llm = ChatOpenAI(
+            model=chat_model,
+            api_key=api_key,
+        )
+
+        embeddings = OpenAIEmbeddings(
+            model=embedding_model,
+            api_key=api_key,
+        )
+
+        return llm, embeddings
+
+    raise ValueError(
+        f"Provider inválido: {provider}"
+    )
+
 
 # Exibe os primeiros caracteres da chave apenas como verificação.
 #
@@ -157,28 +253,29 @@ print(raw_documents[0].page_content[:500] + "...")
 # Por isso, o conteúdo será dividido em partes menores chamadas `chunks`.
 print("\nSplitting the loaded document into smaller chunks...")
 
-# Inicializa o divisor recursivo.
-#
-# Parâmetros:
-#   - chunk_size=1000:
-#       tenta limitar cada trecho a aproximadamente 1.000 caracteres;
-#
-#   - chunk_overlap=150:
-#       repete aproximadamente 150 caracteres entre chunks consecutivos.
-#
-# O overlap ajuda a reduzir a perda de contexto quando uma informação está localizada
-# exatamente no limite entre dois trechos.
+CHUNK_SIZE = int(
+    os.getenv(
+        "CHUNK_SIZE",
+        "1000",
+    )
+)
+
+CHUNK_OVERLAP = int(
+    os.getenv(
+        "CHUNK_OVERLAP",
+        "150",
+    )
+)
+
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=150,
+    chunk_size=CHUNK_SIZE,
+    chunk_overlap=CHUNK_OVERLAP,
 )
 
 # Divide os documentos carregados em vários objetos `Document` menores.
 # Os metadados do documento original são preservados nos chunks.
 documents = text_splitter.split_documents(raw_documents)
 
-# Interrompe a execução caso nenhum chunk tenha sido criado.
-#
 # Essa validação evita que as etapas de embeddings e armazenamento vetorial sejam
 # executadas com uma coleção vazia.
 if not documents:
@@ -189,68 +286,32 @@ if not documents:
 
 print(f"Document split into {len(documents)} chunks.")
 
-# Exibe o terceiro chunk da lista como exemplo.
-#
-# ATENÇÃO:
-# O índice `2` representa o terceiro item. Caso o documento produza menos de três
-# chunks, esta linha poderá gerar `IndexError`. O comportamento foi mantido para
-# preservar o código original.
 print("\n--- Example Chunk (Chunk 2) ---")
 print(documents[2].page_content)
-
-# Exibe os metadados associados ao mesmo chunk.
-# Para o TextLoader, normalmente será apresentado o caminho em `source`.
+.
 print("\n--- Metadata for Chunk 2 ---")
 print(documents[2].metadata)
 
 
 # ======================================================================================
-# 4. INICIALIZAÇÃO DO MODELO DE EMBEDDINGS
+# INICIALIZAÇÃO DO MODELO DE CHAT E EMBEDDINGS
 # ======================================================================================
 
-# Embeddings são representações vetoriais do texto.
-# Textos semanticamente semelhantes tendem a produzir vetores próximos no espaço
-# multidimensional, permitindo realizar pesquisas por similaridade.
 print("Initializing OpenAI Embeddings model...")
 
-# Cria a integração de embeddings utilizando a chave configurada anteriormente.
-#
-# O LangChain utiliza este componente posteriormente para:
-#   1. vetorizar cada chunk;
-#   2. vetorizar a pergunta;
-#   3. comparar a pergunta com os chunks armazenados.
-embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+provider = escolher_provider()
 
-print("OpenAI Embeddings model initialized.")
+llm, embeddings = criar_modelos(
+    provider
+)
 
-
-# ======================================================================================
-# 5. CRIAÇÃO DO VECTOR STORE NO CHROMADB
-# ======================================================================================
-
-# O vector store armazena os vetores e os documentos associados.
-# Durante a criação, cada chunk será enviado ao modelo de embeddings.
 print("\nCreating ChromaDB vector store and embedding documents...")
 
-# Cria uma coleção Chroma em memória a partir dos documentos.
-#
-# Entradas:
-#   - documents: lista de chunks;
-#   - embedding: modelo usado para gerar os vetores.
-#
-# Como não foi informado `persist_directory`, os dados não são explicitamente
-# configurados aqui para persistência em disco.
 vector_store = Chroma.from_documents(
     documents=documents,
     embedding=embeddings,
 )
 
-# Consulta a quantidade de elementos diretamente na coleção interna do Chroma.
-#
-# ATENÇÃO:
-# `_collection` é um atributo interno da implementação. Acessos iniciados por
-# sublinhado são considerados detalhes internos e podem mudar entre versões.
-# Esta abordagem foi mantida porque pertence ao código original.
 vector_count = vector_store._collection.count()
 print(f"ChromaDB vector store created with {vector_count} items.")
 
@@ -260,16 +321,6 @@ if vector_count == 0:
         "Vector store creation resulted in 0 items. Check previous steps."
     )
 
-
-# ======================================================================================
-# 6. INSPEÇÃO DOS DADOS ARMAZENADOS NO CHROMA
-# ======================================================================================
-
-# Recupera um item da coleção para fins educacionais e de diagnóstico.
-#
-# O parâmetro `include` solicita:
-#   - o texto original do chunk;
-#   - o vetor de embedding gerado para esse texto.
 stored_data = vector_store._collection.get(
     include=["embeddings", "documents"],
     limit=1,
@@ -278,11 +329,6 @@ stored_data = vector_store._collection.get(
 # Exibe o conteúdo textual do primeiro registro armazenado.
 print("First chunk text:\n", stored_data["documents"][0])
 
-# Exibe o embedding completo.
-#
-# Observação:
-# Vetores de embeddings normalmente possuem muitas dimensões, tornando essa saída
-# extensa e pouco adequada para logs de produção.
 print("\nEmbedding vector:\n", stored_data["embeddings"][0])
 
 # Exibe a quantidade de dimensões do vetor.
@@ -291,111 +337,19 @@ print(
     f"{len(stored_data['embeddings'][0])} dimensions."
 )
 
-
-# ======================================================================================
-# 7. TESTE DE BUSCA POR SIMILARIDADE
-# ======================================================================================
-
-# Antes de criar a chain completa, esta etapa valida se o vector store consegue
-# localizar chunks semanticamente relacionados a uma pergunta.
-print("\n--- Testing Similarity Search in Vector Store ---")
-
-# Pergunta usada apenas para testar a recuperação vetorial.
-test_query = "Who is Daniel Humm?"
-print(f"Searching for documents similar to: '{test_query}'")
-
-try:
-    # Realiza a busca por similaridade.
-    #
-    # O parâmetro `k=3` solicita os três chunks considerados mais relevantes
-    # para a pergunta informada.
-    similar_docs = vector_store.similarity_search(test_query, k=3)
-    print(f"\nFound {len(similar_docs)} similar documents:")
-
-    # Percorre os documentos encontrados e exibe um resumo de cada resultado.
-    for i, doc in enumerate(similar_docs):
-        print(f"\n--- Document {i + 1} ---")
-
-        # Limita a visualização aos primeiros 700 caracteres para evitar uma saída
-        # muito extensa no console.
-        content_snippet = doc.page_content[:700].strip() + "..."
-
-        # Recupera o caminho de origem registrado nos metadados.
-        # Caso não exista, utiliza o texto padrão `Unknown Source`.
-        source = doc.metadata.get("source", "Unknown Source")
-
-        print(f"Content Snippet: {content_snippet}")
-        print(f"Source: {source}")
-
-except Exception as e:
-    # Captura erros ocorridos durante a busca e permite diagnosticar o problema.
-    #
-    # Em uma aplicação maior, recomenda-se substituir `print` pelo módulo `logging`
-    # e tratar exceções mais específicas.
-    print(f"An error occurred during similarity search: {e}")
-
-
-# ======================================================================================
-# 8. CONFIGURAÇÃO DO RETRIEVER
-# ======================================================================================
-
-# Converte o vector store em um retriever.
-#
-# O retriever oferece uma interface padronizada para recuperar documentos e permite
-# que a implementação do armazenamento seja substituída futuramente.
-#
-# `search_kwargs={"k": 3}` configura o retorno dos três chunks mais relevantes.
-retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+TOP_K = int(
+    os.getenv(
+        "TOP_K",
+        "3",
+    )
+)
+retriever = vector_store.as_retriever(
+    search_kwargs={
+        "k": TOP_K
+    }
+)
 print("Retriever configured successfully from vector store.")
 
-
-# ======================================================================================
-# 9. CONFIGURAÇÃO DO MODELO DE LINGUAGEM
-# ======================================================================================
-
-# Inicializa o modelo responsável por gerar a resposta final usando os chunks
-# recuperados como contexto.
-#
-# A temperatura controla a variabilidade das respostas:
-#   - valores menores tendem a produzir respostas mais determinísticas;
-#   - valores maiores aumentam a diversidade e a criatividade.
-#
-# OBSERVAÇÃO:
-# O comentário original indicava uma resposta mais factual, mas o valor 1.3 é
-# relativamente alto para um fluxo de perguntas e respostas baseado em documentos.
-# O valor foi mantido para não alterar o comportamento fornecido.
-llm = OpenAI(
-    temperature=1.3,
-    openai_api_key=openai_api_key,
-)
-
-print("OpenAI LLM successfully initialized.")
-
-
-# ======================================================================================
-# 10. CRIAÇÃO DA CHAIN DE PERGUNTAS E RESPOSTAS COM FONTES
-# ======================================================================================
-
-# Cria a chain que conecta:
-#   pergunta -> retriever -> documentos relevantes -> LLM -> resposta com fontes.
-#
-# Parâmetros principais:
-#
-#   - chain_type="stuff":
-#       envia os documentos recuperados diretamente no contexto do modelo;
-#
-#   - retriever=retriever:
-#       usa o recuperador configurado sobre o ChromaDB;
-#
-#   - return_source_documents=True:
-#       inclui no resultado os objetos `Document` realmente utilizados;
-#
-#   - verbose=True:
-#       exibe detalhes internos da execução no console.
-#
-# O tipo `stuff` é simples e adequado quando os chunks recuperados cabem no limite
-# de contexto do modelo. Estratégias diferentes podem ser avaliadas para coleções
-# maiores.
 qa_chain = RetrievalQAWithSourcesChain.from_chain_type(
     llm=llm,
     chain_type="stuff",
